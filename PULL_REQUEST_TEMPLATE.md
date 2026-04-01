@@ -1,4 +1,4 @@
-Ticket: [Ticket No (for eg. B9-1974)](https://recycloroboprojectmanagement.atlassian.net/browse/B9-XXXX)
+Ticket: [B9-XXXX](https://recycloroboprojectmanagement.atlassian.net/browse/B9-XXXX)
 
 # Description
 
