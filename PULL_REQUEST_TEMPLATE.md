@@ -1,41 +1,75 @@
 Ticket: [B9-XXXX](https://recycloroboprojectmanagement.atlassian.net/browse/B9-XXXX)
 
-# Description
+---
 
-- Please include a summary of the change and which issue is fixed.
-- Please also include relevant motivation and context.
-- List any dependencies that are required for this change.
+## Summary
+> 1–2 sentences. What does this PR do?
 
-## Type of change
+---
 
-Please delete options that are not relevant.
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] This change requires a documentation update
+## What Changed
+- 
+- 
+- 
 
-# How Should This Be Tested?
+---
 
-Please describe the method used to test the changes made. Provide instructions so we can reproduce. Please also list any relevant database migrations or seeders required to run before testing.
-- [ ] Test A
-- [ ] Test B
+## Why This Change Was Needed
+> What problem does this solve? What was broken, missing, or risky before?
 
-**Test Configuration**:
-* Migrations:
-* New Seeders:
-* New Packages Added:
-* Hardware Required (optional):
+---
 
-# Dependent Changes (if applicable)
+## Key Implementation Notes (if applicable)
+> Only include if relevant — keep this focused.
 
-Please include any PRs that need to be reviewed and merged before reviewing this PR. Please list the PRs in order of which needs to be merged first.
+- API / endpoint changes:
+- Database / schema changes:
+- Config / env changes:
+- External integrations (GitHub, AWS, devices, etc.):
+- Edge cases / limitations:
 
-1. [Required PR 1](https://github.com/Block-9-Consultancy-Inc/REPO-NAME/pull/PULL-REQUEST-NO)
-2. [Required PR 2](https://github.com/Block-9-Consultancy-Inc/REPO-NAME/pull/PULL-REQUEST-NO)
+---
 
-# Checklist:
+## How Should This Be Tested?
 
-- [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my own code
-- [ ] My changes generate no new warnings
-- [ ] Any dependent changes have been merged and published in downstream modules
+### Steps
+1. 
+2. 
+3. 
+
+### Expected Result
+- 
+- 
+
+---
+
+## Impact / Deployment Notes
+- Migrations: Yes / No
+- Backward compatible: Yes / No
+- New env variables:
+- Hardware required:
+- External services affected:
+
+---
+
+## Dependent Changes (if applicable)
+- None  
+or  
+1. [PR link]
+2. [PR link]
+
+---
+
+## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+
+---
+
+## Checklist
+- [ ] I removed irrelevant template text
+- [ ] I included clear testing steps with expected results
+- [ ] I documented any schema / env / config changes
+- [ ] I self-reviewed this PR
