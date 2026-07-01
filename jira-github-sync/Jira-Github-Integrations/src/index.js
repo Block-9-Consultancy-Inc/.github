@@ -1,10 +1,12 @@
 import api, { route } from '@forge/api';
 import crypto from 'node:crypto';
+import { JIRA_ACCOUNT_ID_TO_GITHUB_USERNAME } from './github-user-mapping.js';
 
 const GITHUB_API_BASE_URL = 'https://api.github.com';
 const GITHUB_API_VERSION = '2022-11-28';
 const JIRA_ISSUE_KEY_PATTERN = /\b[A-Z][A-Z0-9]+-\d+\b/gi;
 const COMMENT_MARKER_PREFIX = '<!-- jira-description-sync:';
+const JIRA_REVIEWERS_FIELD_ID = 'customfield_10251';
 const MAX_GITHUB_COMMENT_BODY_LENGTH = 65536;
 const MAX_GITHUB_COMMENT_PAGES_TO_SCAN = 10;
 
@@ -18,6 +20,12 @@ const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
 
 export const githubPullRequestWebhook = async (event) => {
   try {
+    console.info('Received GitHub webhook request.', {
+      method: event.method,
+      githubEvent: getHeaderValue(event.headers, 'x-github-event'),
+      deliveryId: getHeaderValue(event.headers, 'x-github-delivery')
+    });
+
     if (event.method !== 'POST') {
       return jsonResponse(405, { message: 'Only POST requests are supported.' });
     }
@@ -43,6 +51,10 @@ export const githubPullRequestWebhook = async (event) => {
     const githubEventName = getHeaderValue(event.headers, 'x-github-event');
 
     if (githubEventName !== 'pull_request') {
+      console.info('Ignored non-pull-request GitHub event.', {
+        githubEvent: githubEventName || 'unknown'
+      });
+
       return jsonResponse(202, {
         message: `Ignored GitHub event: ${githubEventName || 'unknown'}.`
       });
@@ -51,6 +63,10 @@ export const githubPullRequestWebhook = async (event) => {
     const payload = parseJsonBody(rawBody);
 
     if (!SUPPORTED_PULL_REQUEST_ACTIONS.has(payload.action)) {
+      console.info('Ignored unsupported pull request action.', {
+        action: payload.action || 'unknown'
+      });
+
       return jsonResponse(202, {
         message: `Ignored pull_request action: ${payload.action || 'unknown'}.`
       });
@@ -76,18 +92,40 @@ export const githubPullRequestWebhook = async (event) => {
     }
 
     if (!isAllowedGitHubOrganization(repositoryOwner)) {
+      console.info('Ignored pull request from an unconfigured GitHub owner.', {
+        repositoryOwner,
+        configuredOrganization: process.env.GITHUB_ORGANIZATION
+      });
+
       return jsonResponse(202, {
         message: `Ignored pull request from GitHub owner ${repositoryOwner}.`
       });
     }
 
+    console.info('Processing GitHub pull request webhook.', {
+      action: payload.action,
+      repositoryOwner,
+      repositoryName,
+      pullRequestNumber,
+      pullRequestTitle: pullRequest.title,
+      pullRequestBranch: pullRequest.head?.ref
+    });
+
     const jiraIssueKey = findJiraIssueKey(pullRequest);
 
     if (!jiraIssueKey) {
+      console.info('No Jira issue key was found in the configured PR fields.', {
+        pullRequestTitle: pullRequest.title,
+        pullRequestBranch: pullRequest.head?.ref,
+        allowedProjectKeys: process.env.JIRA_PROJECT_KEYS || ''
+      });
+
       return jsonResponse(202, {
         message: 'No Jira issue key was found in the pull request title or branch name.'
       });
     }
+
+    console.info('Found Jira issue key on pull request.', { jiraIssueKey });
 
     const jiraIssue = await getJiraIssue(jiraIssueKey);
 
@@ -96,6 +134,21 @@ export const githubPullRequestWebhook = async (event) => {
         message: `Jira issue ${jiraIssueKey} was not found or cannot be read by this app.`
       });
     }
+
+    console.info('Loaded Jira issue.', {
+      jiraIssueKey: jiraIssue.key,
+      hasDescription: Boolean(jiraIssue.fields?.description),
+      hasAssignee: Boolean(jiraIssue.fields?.assignee),
+      reviewerCount: getJiraUsersFromField(jiraIssue.fields?.[JIRA_REVIEWERS_FIELD_ID]).length
+    });
+
+    await syncJiraPeopleToGitHubPullRequest({
+      jiraIssue,
+      owner: repositoryOwner,
+      repo: repositoryName,
+      pullRequestNumber,
+      pullRequestAuthor: pullRequest.user?.login
+    });
 
     const commentMarker = buildCommentMarker(jiraIssue.key);
 
@@ -107,6 +160,13 @@ export const githubPullRequestWebhook = async (event) => {
     });
 
     if (alreadyCommented) {
+      console.info('Skipped GitHub comment because the Jira description was already synced.', {
+        jiraIssueKey: jiraIssue.key,
+        repositoryOwner,
+        repositoryName,
+        pullRequestNumber
+      });
+
       return jsonResponse(200, {
         message: `A Jira description comment for ${jiraIssue.key} already exists on this pull request.`
       });
@@ -119,6 +179,13 @@ export const githubPullRequestWebhook = async (event) => {
       body: buildGitHubComment({ jiraIssue, marker: commentMarker })
     });
 
+    console.info('Created GitHub pull request comment with Jira description.', {
+      jiraIssueKey: jiraIssue.key,
+      repositoryOwner,
+      repositoryName,
+      pullRequestNumber
+    });
+
     return jsonResponse(200, {
       message: `Added the Jira description from ${jiraIssue.key} to GitHub PR #${pullRequestNumber}.`
     });
@@ -129,7 +196,8 @@ export const githubPullRequestWebhook = async (event) => {
     });
 
     return jsonResponse(500, {
-      message: 'Failed to process the GitHub pull request webhook.'
+      message: 'Failed to process the GitHub pull request webhook.',
+      ...(isDebugResponseEnabled() ? { debug: sanitizeErrorMessage(error.message) } : {})
     });
   }
 };
@@ -141,6 +209,33 @@ function getMissingConfiguration() {
   ];
 
   return requiredEnvironmentVariables.filter((variableName) => !process.env[variableName]);
+}
+
+function isDebugResponseEnabled() {
+  /*
+   * GitHub's webhook delivery screen shows the response body, while Forge logs
+   * require a working local CLI login. This opt-in flag exposes sanitized error
+   * text in the webhook response during setup without changing normal production
+   * behavior.
+   */
+  return process.env.DEBUG_WEBHOOK_RESPONSES === 'true';
+}
+
+function sanitizeErrorMessage(errorMessage) {
+  if (!errorMessage) {
+    return 'Unknown error';
+  }
+
+  return errorMessage
+    .replace(new RegExp(escapeRegExp(process.env.GITHUB_TOKEN || 'a^'), 'g'), '[redacted-github-token]')
+    .replace(
+      new RegExp(escapeRegExp(process.env.GITHUB_WEBHOOK_SECRET || 'a^'), 'g'),
+      '[redacted-webhook-secret]'
+    );
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function isAllowedGitHubOrganization(repositoryOwner) {
@@ -258,7 +353,9 @@ function extractJiraIssueKeys(text) {
 async function getJiraIssue(issueKey) {
   const response = await api
     .asApp()
-    .requestJira(route`/rest/api/3/issue/${issueKey}?fields=summary,description`);
+    .requestJira(
+      route`/rest/api/3/issue/${issueKey}?fields=summary,description,assignee,customfield_10251`
+    );
   const responseBody = await response.text();
 
   if (response.status === 404) {
@@ -273,6 +370,171 @@ async function getJiraIssue(issueKey) {
   }
 
   return JSON.parse(responseBody);
+}
+
+async function syncJiraPeopleToGitHubPullRequest({
+  jiraIssue,
+  owner,
+  repo,
+  pullRequestNumber,
+  pullRequestAuthor
+}) {
+  /*
+   * People sync is deliberately best-effort. The core promise of this app is to
+   * copy the Jira description into GitHub; a private email address, missing user
+   * match, or GitHub permission issue should be visible in logs without blocking
+   * the description comment.
+   */
+  try {
+    const jiraAssignee = jiraIssue.fields?.assignee;
+    const githubAssignee = await findGitHubUsernameForJiraUser(jiraAssignee);
+
+    if (githubAssignee) {
+      await addGitHubPullRequestAssignee({
+        owner,
+        repo,
+        issueNumber: pullRequestNumber,
+        assignee: githubAssignee
+      });
+
+      console.info('Synced Jira assignee to GitHub pull request assignee.', {
+        jiraIssueKey: jiraIssue.key,
+        githubAssignee
+      });
+    }
+
+    const jiraReviewers = getJiraUsersFromField(jiraIssue.fields?.[JIRA_REVIEWERS_FIELD_ID]);
+    const githubReviewers = await findGitHubUsernamesForJiraUsers(jiraReviewers);
+    const requestableReviewers = githubReviewers.filter((reviewer) => {
+      return reviewer.toLowerCase() !== (pullRequestAuthor || '').toLowerCase();
+    });
+
+    if (requestableReviewers.length > 0) {
+      await requestGitHubPullRequestReviewers({
+        owner,
+        repo,
+        pullRequestNumber,
+        reviewers: requestableReviewers
+      });
+
+      console.info('Synced Jira reviewer field to GitHub requested reviewers.', {
+        jiraIssueKey: jiraIssue.key,
+        githubReviewers: requestableReviewers
+      });
+    }
+  } catch (error) {
+    console.warn('Skipped some or all Jira people sync for this pull request.', {
+      jiraIssueKey: jiraIssue.key,
+      message: error.message
+    });
+  }
+}
+
+function getJiraUsersFromField(fieldValue) {
+  /*
+   * Jira custom user fields can be configured as a single-user picker or a
+   * multi-user picker. Normalizing here lets the GitHub reviewer sync support
+   * either configuration without additional app settings.
+   */
+  if (!fieldValue) {
+    return [];
+  }
+
+  if (Array.isArray(fieldValue)) {
+    return fieldValue.filter(Boolean);
+  }
+
+  return [fieldValue];
+}
+
+async function findGitHubUsernamesForJiraUsers(jiraUsers) {
+  const githubUsernames = [];
+
+  for (const jiraUser of jiraUsers) {
+    const githubUsername = await findGitHubUsernameForJiraUser(jiraUser);
+
+    if (githubUsername && !githubUsernames.some((username) => username === githubUsername)) {
+      githubUsernames.push(githubUsername);
+    }
+  }
+
+  return githubUsernames;
+}
+
+async function findGitHubUsernameForJiraUser(jiraUser) {
+  const mappedUsername = findMappedGitHubUsernameForJiraUser(jiraUser);
+
+  if (mappedUsername) {
+    return mappedUsername;
+  }
+
+  const emailAddress = jiraUser?.emailAddress;
+
+  if (!emailAddress) {
+    console.info('Skipped Jira user because Jira did not expose an email address.', {
+      jiraAccountId: jiraUser?.accountId,
+      displayName: jiraUser?.displayName
+    });
+
+    return undefined;
+  }
+
+  const searchResult = await githubRequestJson(
+    `/search/users?q=${encodeURIComponent(`${emailAddress} in:email`)}&per_page=2`,
+    { method: 'GET' }
+  );
+
+  if (searchResult.total_count !== 1 || !searchResult.items?.[0]?.login) {
+    console.info('Skipped Jira user because no unique GitHub user matched the email address.', {
+      jiraAccountId: jiraUser.accountId,
+      githubSearchMatches: searchResult.total_count || 0
+    });
+
+    return undefined;
+  }
+
+  return searchResult.items[0].login;
+}
+
+function findMappedGitHubUsernameForJiraUser(jiraUser) {
+  const accountId = jiraUser?.accountId;
+
+  if (!accountId) {
+    return undefined;
+  }
+
+  const mappedUsername = JIRA_ACCOUNT_ID_TO_GITHUB_USERNAME[accountId]?.trim();
+
+  if (!mappedUsername) {
+    return undefined;
+  }
+
+  console.info('Matched Jira user to GitHub username from local mapping.', {
+    jiraAccountId: accountId,
+    githubUsername: mappedUsername
+  });
+
+  return mappedUsername;
+}
+
+async function addGitHubPullRequestAssignee({ owner, repo, issueNumber, assignee }) {
+  await githubRequestJson(
+    `/repos/${encodePathSegment(owner)}/${encodePathSegment(repo)}/issues/${issueNumber}/assignees`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ assignees: [assignee] })
+    }
+  );
+}
+
+async function requestGitHubPullRequestReviewers({ owner, repo, pullRequestNumber, reviewers }) {
+  await githubRequestJson(
+    `/repos/${encodePathSegment(owner)}/${encodePathSegment(repo)}/pulls/${pullRequestNumber}/requested_reviewers`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reviewers })
+    }
+  );
 }
 
 async function hasExistingGitHubComment({ owner, repo, issueNumber, marker }) {

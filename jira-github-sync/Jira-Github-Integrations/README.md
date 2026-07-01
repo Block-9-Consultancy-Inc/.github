@@ -6,6 +6,14 @@ the app looks for a Jira issue key in the PR title or source branch. If it finds
 an issue key, it loads that Jira issue and adds the Jira description as a GitHub
 PR comment.
 
+The app also tries to sync people from Jira to GitHub:
+
+- Jira assignee becomes the GitHub PR assignee.
+- Jira custom field `customfield_10251` becomes GitHub requested reviewers.
+
+Users are matched by email address. If Jira does not expose an email address, or
+GitHub cannot find exactly one matching user, that user is skipped.
+
 This intentionally treats the Jira issue key as the connection signal. That
 matches the common Jira/GitHub development-linking workflow and avoids polling
 Jira development metadata.
@@ -31,9 +39,9 @@ forge variables set JIRA_PROJECT_KEYS ABC,DEF
 forge variables set JIRA_SITE_URL https://your-site.atlassian.net
 ```
 
-- `GITHUB_TOKEN` must be able to read issue comments and create issue comments
-  on the target repository. GitHub uses issue comments for pull request
-  conversation comments.
+- `GITHUB_TOKEN` must be able to read and write issue comments, assign issues,
+  request pull request reviewers, and search GitHub users. GitHub uses issue
+  comments for pull request conversation comments.
 - `GITHUB_WEBHOOK_SECRET` must match the secret configured on the GitHub webhook.
 - `GITHUB_ORGANIZATION` restricts accepted webhook traffic to one GitHub
   organization. This is recommended when using a GitHub organization webhook.
@@ -42,12 +50,16 @@ forge variables set JIRA_SITE_URL https://your-site.atlassian.net
 - `JIRA_SITE_URL` is only used to link the heading in the GitHub comment back to
   Jira.
 
+Jira Cloud may hide user email addresses based on profile privacy settings. The
+app requests Jira user-read permission so Jira can include `emailAddress` when
+it is available, but users with hidden emails will still be skipped.
+
 Forge environment variable changes take effect after redeploying the app.
 
 ## Deploy and install
 
 ```sh
-forge deploy --non-interactive --e development
+forge deploy --non-interactive -e development
 forge install --non-interactive --site <site-url> --product jira --environment development
 ```
 
