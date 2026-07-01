@@ -1,0 +1,31 @@
+modules:
+  webtrigger:
+    - key: github-pull-request-webhook
+      function: gh-pr-webhook
+      urlFormat: v2
+      response:
+        type: dynamic
+  function:
+    - key: gh-pr-webhook
+      handler: index.githubPullRequestWebhook
+
+permissions:
+  scopes:
+    - read:jira-work
+  external:
+    fetch:
+      backend:
+        - remote: github-api
+
+remotes:
+  - key: github-api
+    baseUrl: https://api.github.com
+    operations:
+      - fetch
+
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/4716b11a-86fe-4fa4-95d9-1333f5c58433
