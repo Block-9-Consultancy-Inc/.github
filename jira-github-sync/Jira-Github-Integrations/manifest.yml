@@ -8,11 +8,38 @@ modules:
   function:
     - key: gh-pr-webhook
       handler: index.githubPullRequestWebhook
+    - key: jira-issue-updated
+      handler: index.jiraIssueUpdated
+    - key: jira-issue-assigned
+      handler: index.jiraIssueAssigned
+    - key: jira-issue-commented
+      handler: index.jiraIssueCommented
+  trigger:
+    - key: jira-issue-updated-trigger
+      function: jira-issue-updated
+      events:
+        - avi:jira:updated:issue
+      filter:
+        ignoreSelf: true
+    - key: jira-issue-assigned-trigger
+      function: jira-issue-assigned
+      events:
+        - avi:jira:assigned:issue
+      filter:
+        ignoreSelf: true
+    - key: jira-issue-commented-trigger
+      function: jira-issue-commented
+      events:
+        - avi:jira:commented:issue
+      filter:
+        ignoreSelf: true
 
 permissions:
   scopes:
     - read:jira-work
     - read:jira-user
+    - write:jira-work
+    - storage:app
   external:
     fetch:
       backend:

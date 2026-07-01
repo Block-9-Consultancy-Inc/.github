@@ -1,7 +1,11 @@
 /*
  * Maps Jira Cloud account IDs to GitHub usernames.
  *
- * Fill each empty string with the matching GitHub username, for example:
+ * The bidirectional sync needs this mapping in both directions:
+ * - Jira -> GitHub when a Jira assignee or reviewer should be applied to a PR.
+ * - GitHub -> Jira when a PR assignee or requested reviewer should update Jira.
+ *
+ * Fill each value with the matching GitHub username, for example:
  * '5f46daa1ea5e2f0039c2edac': 'b9-mourud',
  *
  * Keep values empty when a Jira user should not be assigned or requested for
@@ -100,8 +104,14 @@ export const JIRA_ACCOUNT_ID_TO_GITHUB_USERNAME = {
   // '712020:00778638-b735-43a8-bbc4-95100e68f95c': '',
 
   // Alexander Houghton
-  '712020:e5a64c70-4a3a-4256-91ef-420b9ddca995': 'b9-alexander',
+  '712020:e5a64c70-4a3a-4256-91ef-420b9ddca995': 'b9-alexander'
 
   // // Stathios Tsangaris
   // '712020:e1c7398a-4c84-49b3-94a3-df981e822537': ''
 };
+
+export const GITHUB_USERNAME_TO_JIRA_ACCOUNT_ID = Object.fromEntries(
+  Object.entries(JIRA_ACCOUNT_ID_TO_GITHUB_USERNAME)
+    .filter(([, githubUsername]) => Boolean(githubUsername?.trim()))
+    .map(([jiraAccountId, githubUsername]) => [githubUsername.trim().toLowerCase(), jiraAccountId])
+);
