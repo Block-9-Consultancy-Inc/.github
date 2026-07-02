@@ -10,13 +10,14 @@ import {
   isValidGitHubSignature,
   sanitizeErrorMessage
 } from './github-webhook.js';
-import { findJiraIssueKey } from './issue-key.js';
+import { findJiraIssueKey, findJiraIssueKeyForPushCommit } from './issue-key.js';
 import { getJiraIssue } from './jira-client.js';
 import { getGitHubPullRequest } from './github-client.js';
 import { getIssueKeyForPullRequest, rememberPullRequestLink } from './sync-state.js';
 import {
   addGitHubReviewerToJira,
   announceGitHubPullRequestCommitsToJira,
+  announceGitHubPushCommitsToJira,
   announceGitHubPullRequestReviewCommentToJira,
   announceGitHubPullRequestReviewThreadResolvedToJira,
   announceGitHubPullRequestReviewToJira,
@@ -63,6 +64,10 @@ export async function githubPullRequestWebhook(event) {
       return handlePullRequestEvent(payload);
     }
 
+    if (githubEventName === 'push') {
+      return handlePushEvent(payload);
+    }
+
     if (githubEventName === 'issue_comment') {
       return handleIssueCommentEvent(payload);
     }
@@ -97,6 +102,112 @@ export async function githubPullRequestWebhook(event) {
       ...(isDebugResponseEnabled() ? { debug: sanitizeErrorMessage(error.message) } : {})
     });
   }
+}
+
+async function handlePushEvent(payload) {
+  const repository = payload.repository;
+  const repositoryOwner = repository?.owner?.login || repository?.owner?.name;
+  const repositoryName = repository?.name;
+  const branchName = getBranchNameFromGitRef(payload.ref);
+
+  if (!repositoryOwner || !repositoryName || !branchName) {
+    return jsonResponse(400, {
+      message: 'The GitHub push payload is missing repository or branch identifiers.'
+    });
+  }
+
+  console.info('Processing GitHub push event.', {
+    repositoryOwner,
+    repositoryName,
+    branchName,
+    commitCount: payload.commits?.length || 0,
+    deleted: Boolean(payload.deleted)
+  });
+
+  if (!isAllowedGitHubOrganization(repositoryOwner)) {
+    return jsonResponse(202, {
+      message: `Ignored push from GitHub owner ${repositoryOwner}.`
+    });
+  }
+
+  if (payload.deleted) {
+    return jsonResponse(202, {
+      message: `Ignored push for deleted branch ${branchName}.`
+    });
+  }
+
+  const commitsByIssueKey = groupPushCommitsByIssueKey({
+    branchName,
+    commits: payload.commits || []
+  });
+  const issueKeys = [...commitsByIssueKey.keys()];
+
+  if (issueKeys.length === 0) {
+    return jsonResponse(202, {
+      message: 'No Jira issue key was found in the pushed branch name or commit messages.'
+    });
+  }
+
+  let createdCommentCount = 0;
+
+  for (const issueKey of issueKeys) {
+    const jiraIssue = await getJiraIssue(issueKey);
+
+    if (!jiraIssue) {
+      console.info('Skipped pushed commits because Jira issue was not found or readable.', {
+        issueKey,
+        repositoryOwner,
+        repositoryName,
+        branchName
+      });
+      continue;
+    }
+
+    const createdComments = await announceGitHubPushCommitsToJira({
+      issueKey,
+      owner: repositoryOwner,
+      repo: repositoryName,
+      branchName,
+      commits: commitsByIssueKey.get(issueKey)
+    });
+
+    createdCommentCount += createdComments.length;
+  }
+
+  return jsonResponse(200, {
+    message: `Processed push on ${branchName}; created ${createdCommentCount} Jira commit comment(s).`
+  });
+}
+
+function groupPushCommitsByIssueKey({ branchName, commits }) {
+  const commitsByIssueKey = new Map();
+
+  for (const commit of commits) {
+    const issueKey = findJiraIssueKeyForPushCommit({
+      branchName,
+      commitMessage: commit.message
+    });
+
+    if (!issueKey) {
+      continue;
+    }
+
+    const issueCommits = commitsByIssueKey.get(issueKey) || [];
+    issueCommits.push(commit);
+    commitsByIssueKey.set(issueKey, issueCommits);
+  }
+
+  return commitsByIssueKey;
+}
+
+function getBranchNameFromGitRef(ref) {
+  const headsPrefix = 'refs/heads/';
+
+  if (!ref?.startsWith(headsPrefix)) {
+    return undefined;
+  }
+
+  return ref.slice(headsPrefix.length);
 }
 
 async function handlePullRequestEvent(payload) {

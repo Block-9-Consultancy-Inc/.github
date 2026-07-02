@@ -436,6 +436,39 @@ export async function announceGitHubPullRequestCommitsToJira({
   return createdComments;
 }
 
+export async function announceGitHubPushCommitsToJira({
+  issueKey,
+  owner,
+  repo,
+  branchName,
+  commits
+}) {
+  const createdComments = [];
+
+  for (const commit of commits || []) {
+    const commitSha = commit.id || commit.sha;
+
+    if (!commitSha || await hasCommitAnnouncement({ owner, repo, commitSha })) {
+      continue;
+    }
+
+    const jiraComment = await addJiraComment({
+      issueKey,
+      body: buildCommitAnnouncementComment({
+        commit,
+        owner,
+        repo,
+        branchName
+      })
+    });
+
+    await rememberCommitAnnouncement({ owner, repo, commitSha, issueKey });
+    createdComments.push(jiraComment);
+  }
+
+  return createdComments;
+}
+
 export async function mirrorGitHubCommentToJira({
   jiraIssueKey,
   githubComment,
@@ -696,24 +729,31 @@ export async function loadAndSyncJiraIssueToKnownPullRequests({ issueKey, eventT
   await syncJiraFieldsToKnownPullRequests({ jiraIssue, eventTime });
 }
 
-function buildCommitAnnouncementComment({ commit, owner, repo, pullRequestNumber }) {
-  const shortSha = commit.sha.slice(0, 7);
+function buildCommitAnnouncementComment({ commit, owner, repo, pullRequestNumber, branchName }) {
+  const commitSha = commit.sha || commit.id;
+  const shortSha = commitSha.slice(0, 7);
   const author = commit.author?.login ||
+    commit.author?.username ||
     commit.commit?.author?.name ||
+    commit.author?.name ||
     commit.commit?.committer?.name ||
+    commit.committer?.name ||
     'unknown GitHub user';
-  const message = (commit.commit?.message || 'No commit message').split('\n')[0];
-  const commitUrl = commit.html_url || `https://github.com/${owner}/${repo}/commit/${commit.sha}`;
+  const message = (commit.commit?.message || commit.message || 'No commit message').split('\n')[0];
+  const commitUrl = commit.html_url || commit.url || `https://github.com/${owner}/${repo}/commit/${commitSha}`;
+  const contextLine = pullRequestNumber
+    ? `Pull request: #${pullRequestNumber}`
+    : `Branch: ${branchName || 'unknown branch'}`;
 
   return [
     `GitHub commit made by ${author}: ${message}`,
     '',
     `Repository: ${owner}/${repo}`,
-    `Pull request: #${pullRequestNumber}`,
+    contextLine,
     `Commit: ${shortSha}`,
     `Original: ${commitUrl}`,
     '',
-    `<!-- jira-github-commit-sync:${owner}/${repo}:${commit.sha} -->`
+    `<!-- jira-github-commit-sync:${owner}/${repo}:${commitSha} -->`
   ].join('\n');
 }
 

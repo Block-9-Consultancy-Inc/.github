@@ -11,6 +11,18 @@ export function findJiraIssueKey(pullRequest) {
   });
 }
 
+export function findJiraIssueKeyForPushCommit({ branchName, commitMessage }) {
+  const allowedProjectKeys = parseAllowedProjectKeys(process.env.JIRA_PROJECT_KEYS);
+
+  return findJiraIssueKeyInTextSources({
+    allowedProjectKeys,
+    textSources: [
+      branchName,
+      commitMessage
+    ]
+  });
+}
+
 export function findJiraIssueKeyInTextSources({ allowedProjectKeys, textSources }) {
   /*
    * The PR title or branch name is the contract that connects GitHub to Jira.

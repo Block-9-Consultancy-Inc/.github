@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   extractJiraIssueKeys,
+  findJiraIssueKeyForPushCommit,
   findJiraIssueKeyInTextSources,
   parseAllowedProjectKeys
 } from '../src/issue-key.js';
@@ -29,6 +30,35 @@ test('finds Jira key from allowed projects only', () => {
   });
 
   assert.equal(issueKey, 'DEF-34');
+});
+
+test('finds Jira key for pushed commits from branch or commit message', () => {
+  const previousProjectKeys = process.env.JIRA_PROJECT_KEYS;
+
+  try {
+    delete process.env.JIRA_PROJECT_KEYS;
+
+    assert.equal(
+      findJiraIssueKeyForPushCommit({
+        branchName: 'feature/abc-12-login-sync',
+        commitMessage: 'Update login behavior'
+      }),
+      'ABC-12'
+    );
+    assert.equal(
+      findJiraIssueKeyForPushCommit({
+        branchName: 'feature/login-sync',
+        commitMessage: 'DEF-34 Update login behavior'
+      }),
+      'DEF-34'
+    );
+  } finally {
+    if (previousProjectKeys === undefined) {
+      delete process.env.JIRA_PROJECT_KEYS;
+    } else {
+      process.env.JIRA_PROJECT_KEYS = previousProjectKeys;
+    }
+  }
 });
 
 test('builds and detects sync markers', () => {
