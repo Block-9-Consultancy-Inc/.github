@@ -8,7 +8,18 @@ export async function findGitHubUsernamesForJiraUsers(jiraUsers) {
   const githubUsernames = [];
 
   for (const jiraUser of jiraUsers) {
-    const githubUsername = await findGitHubUsernameForJiraUser(jiraUser);
+    let githubUsername;
+
+    try {
+      githubUsername = await findGitHubUsernameForJiraUser(jiraUser);
+    } catch (error) {
+      console.warn('Skipped Jira user because GitHub username lookup failed.', {
+        jiraAccountId: jiraUser?.accountId,
+        displayName: jiraUser?.displayName,
+        message: error.message
+      });
+      continue;
+    }
 
     if (githubUsername && !githubUsernames.some((username) => username === githubUsername)) {
       githubUsernames.push(githubUsername);
