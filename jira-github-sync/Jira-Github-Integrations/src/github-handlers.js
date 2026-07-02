@@ -109,6 +109,7 @@ async function handlePullRequestEvent(payload) {
   const repositoryOwner = repository?.owner?.login || repository?.owner?.name;
   const repositoryName = repository?.name;
   const pullRequestNumber = pullRequest?.number;
+  const installationId = payload.installation?.id;
 
   if (!pullRequest || !repositoryOwner || !repositoryName || !pullRequestNumber) {
     return jsonResponse(400, {
@@ -134,7 +135,8 @@ async function handlePullRequestEvent(payload) {
     issueKey: jiraIssueKey,
     owner: repositoryOwner,
     repo: repositoryName,
-    pullRequestNumber
+    pullRequestNumber,
+    installationId
   });
 
   const jiraIssue = await getJiraIssue(jiraIssueKey);
@@ -149,7 +151,8 @@ async function handlePullRequestEvent(payload) {
     jiraIssue,
     owner: repositoryOwner,
     repo: repositoryName,
-    pullRequestNumber
+    pullRequestNumber,
+    installationId
   });
 
   if (payload.action === 'opened' || payload.action === 'synchronize') {
@@ -157,7 +160,8 @@ async function handlePullRequestEvent(payload) {
       issueKey: jiraIssueKey,
       owner: repositoryOwner,
       repo: repositoryName,
-      pullRequestNumber
+      pullRequestNumber,
+      installationId
     });
   }
 
@@ -165,6 +169,7 @@ async function handlePullRequestEvent(payload) {
     await syncGitHubAssigneesToJira({
       issueKey: jiraIssueKey,
       githubAssignees: pullRequest.assignees || [],
+      installationId,
       eventTime: pullRequest.updated_at
     });
   } else if (payload.action === 'review_requested' || payload.action === 'review_request_removed') {
@@ -174,6 +179,7 @@ async function handlePullRequestEvent(payload) {
       owner: repositoryOwner,
       repo: repositoryName,
       pullRequestNumber,
+      installationId,
       eventTime: pullRequest.updated_at
     });
   } else {
@@ -182,6 +188,7 @@ async function handlePullRequestEvent(payload) {
       owner: repositoryOwner,
       repo: repositoryName,
       pullRequestNumber,
+      installationId,
       pullRequestAuthor: pullRequest.user?.login,
       eventTime: pullRequest.updated_at
     });
@@ -209,6 +216,7 @@ async function handleIssueCommentEvent(payload) {
   const repositoryOwner = repository?.owner?.login || repository?.owner?.name;
   const repositoryName = repository?.name;
   const pullRequestNumber = payload.issue?.number;
+  const installationId = payload.installation?.id;
 
   if (!repositoryOwner || !repositoryName || !pullRequestNumber) {
     return jsonResponse(400, {
@@ -225,7 +233,8 @@ async function handleIssueCommentEvent(payload) {
   const pullRequest = await getGitHubPullRequest({
     owner: repositoryOwner,
     repo: repositoryName,
-    pullRequestNumber
+    pullRequestNumber,
+    installationId
   });
   const jiraIssueKey = findJiraIssueKey(pullRequest);
 
@@ -239,7 +248,8 @@ async function handleIssueCommentEvent(payload) {
     issueKey: jiraIssueKey,
     owner: repositoryOwner,
     repo: repositoryName,
-    pullRequestNumber
+    pullRequestNumber,
+    installationId
   });
 
   const mirroredComment = await mirrorGitHubCommentToJira({
@@ -269,7 +279,8 @@ async function handlePullRequestReviewEvent(payload) {
 
   const pullRequestContext = await getLinkedPullRequestContext({
     pullRequest: payload.pull_request,
-    repository: payload.repository
+    repository: payload.repository,
+    installation: payload.installation
   });
 
   if (pullRequestContext.response) {
@@ -281,11 +292,16 @@ async function handlePullRequestReviewEvent(payload) {
     review: payload.review,
     owner: pullRequestContext.repositoryOwner,
     repo: pullRequestContext.repositoryName,
-    pullRequestNumber: pullRequestContext.pullRequestNumber
+    pullRequestNumber: pullRequestContext.pullRequestNumber,
+    installationId: pullRequestContext.installationId
   });
   await addGitHubReviewerToJira({
     issueKey: pullRequestContext.jiraIssueKey,
     githubUsername: payload.review?.user?.login,
+    owner: pullRequestContext.repositoryOwner,
+    repo: pullRequestContext.repositoryName,
+    pullRequestNumber: pullRequestContext.pullRequestNumber,
+    installationId: pullRequestContext.installationId,
     eventTime: payload.review?.submitted_at
   });
 
@@ -317,7 +333,8 @@ async function handlePullRequestReviewCommentEvent(payload) {
 
   const pullRequestContext = await getLinkedPullRequestContext({
     pullRequest: payload.pull_request,
-    repository: payload.repository
+    repository: payload.repository,
+    installation: payload.installation
   });
 
   if (pullRequestContext.response) {
@@ -357,7 +374,8 @@ async function handlePullRequestReviewThreadEvent(payload) {
 
   const pullRequestContext = await getLinkedPullRequestContext({
     pullRequest: payload.pull_request,
-    repository: payload.repository
+    repository: payload.repository,
+    installation: payload.installation
   });
 
   if (pullRequestContext.response) {
@@ -389,10 +407,11 @@ async function handlePullRequestReviewThreadEvent(payload) {
   });
 }
 
-async function getLinkedPullRequestContext({ pullRequest, repository }) {
+async function getLinkedPullRequestContext({ pullRequest, repository, installation }) {
   const repositoryOwner = repository?.owner?.login || repository?.owner?.name;
   const repositoryName = repository?.name;
   const pullRequestNumber = pullRequest?.number;
+  const installationId = installation?.id;
 
   if (!pullRequest || !repositoryOwner || !repositoryName || !pullRequestNumber) {
     console.warn('Ignored review event because required pull request context was missing.', {
@@ -445,14 +464,16 @@ async function getLinkedPullRequestContext({ pullRequest, repository }) {
     issueKey: jiraIssueKey,
     owner: repositoryOwner,
     repo: repositoryName,
-    pullRequestNumber
+    pullRequestNumber,
+    installationId
   });
 
   return {
     jiraIssueKey,
     repositoryOwner,
     repositoryName,
-    pullRequestNumber
+    pullRequestNumber,
+    installationId
   };
 }
 

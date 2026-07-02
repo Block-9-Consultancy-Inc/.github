@@ -51,14 +51,16 @@ export async function syncJiraFieldsToKnownPullRequests({ jiraIssue, eventTime }
     const pullRequest = await getGitHubPullRequest({
       owner: link.owner,
       repo: link.repo,
-      pullRequestNumber: link.pullRequestNumber
+      pullRequestNumber: link.pullRequestNumber,
+      installationId: link.installationId
     });
 
     await syncJiraDescriptionToGitHubPullRequest({
       jiraIssue,
       owner: link.owner,
       repo: link.repo,
-      pullRequestNumber: link.pullRequestNumber
+      pullRequestNumber: link.pullRequestNumber,
+      installationId: link.installationId
     });
 
     await syncJiraPeopleToGitHubPullRequest({
@@ -66,6 +68,7 @@ export async function syncJiraFieldsToKnownPullRequests({ jiraIssue, eventTime }
       owner: link.owner,
       repo: link.repo,
       pullRequestNumber: link.pullRequestNumber,
+      installationId: link.installationId,
       pullRequestAuthor: pullRequest.user?.login,
       eventTime
     });
@@ -76,7 +79,8 @@ export async function syncJiraDescriptionToGitHubPullRequest({
   jiraIssue,
   owner,
   repo,
-  pullRequestNumber
+  pullRequestNumber,
+  installationId
 }) {
   const body = buildGitHubDescriptionComment({ jiraIssue });
   const storedCommentId = await getDescriptionCommentId({
@@ -87,7 +91,7 @@ export async function syncJiraDescriptionToGitHubPullRequest({
   });
 
   if (storedCommentId) {
-    await updateGitHubIssueComment({ owner, repo, commentId: storedCommentId, body });
+    await updateGitHubIssueComment({ owner, repo, commentId: storedCommentId, body, installationId });
     return storedCommentId;
   }
 
@@ -95,11 +99,18 @@ export async function syncJiraDescriptionToGitHubPullRequest({
     owner,
     repo,
     issueNumber: pullRequestNumber,
-    issueKey: jiraIssue.key
+    issueKey: jiraIssue.key,
+    installationId
   });
 
   if (fallbackComment?.id) {
-    await updateGitHubIssueComment({ owner, repo, commentId: fallbackComment.id, body });
+    await updateGitHubIssueComment({
+      owner,
+      repo,
+      commentId: fallbackComment.id,
+      body,
+      installationId
+    });
     await rememberDescriptionCommentId({
       issueKey: jiraIssue.key,
       owner,
@@ -114,7 +125,8 @@ export async function syncJiraDescriptionToGitHubPullRequest({
     owner,
     repo,
     issueNumber: pullRequestNumber,
-    body
+    body,
+    installationId
   });
   await rememberDescriptionCommentId({
     issueKey: jiraIssue.key,
@@ -132,6 +144,7 @@ export async function syncJiraPeopleToGitHubPullRequest({
   owner,
   repo,
   pullRequestNumber,
+  installationId,
   pullRequestAuthor,
   eventTime
 }) {
@@ -158,7 +171,8 @@ export async function syncJiraPeopleToGitHubPullRequest({
         owner,
         repo,
         issueNumber: pullRequestNumber,
-        desiredAssignees
+        desiredAssignees,
+        installationId
       });
     }
 
@@ -181,7 +195,8 @@ export async function syncJiraPeopleToGitHubPullRequest({
         owner,
         repo,
         pullRequestNumber,
-        desiredReviewers
+        desiredReviewers,
+        installationId
       });
     }
   } catch (error) {
@@ -192,7 +207,11 @@ export async function syncJiraPeopleToGitHubPullRequest({
   }
 }
 
-export async function syncGitHubAssigneesToJira({ issueKey, githubAssignees, eventTime }) {
+export async function syncGitHubAssigneesToJira({
+  issueKey,
+  githubAssignees,
+  eventTime
+}) {
   const jiraAccountIds = githubAssignees
     .map((assignee) => findJiraAccountIdForGitHubUsername(assignee.login))
     .filter(Boolean);
@@ -216,6 +235,7 @@ export async function syncGitHubReviewersToJira({
   owner,
   repo,
   pullRequestNumber,
+  installationId,
   eventTime
 }) {
   const jiraIssue = await getJiraIssue(issueKey);
@@ -225,7 +245,7 @@ export async function syncGitHubReviewersToJira({
   }
 
   const submittedReviewAuthors = owner && repo && pullRequestNumber
-    ? await getSubmittedReviewAuthors({ owner, repo, pullRequestNumber })
+    ? await getSubmittedReviewAuthors({ owner, repo, pullRequestNumber, installationId })
     : [];
 
   const existingJiraReviewerAccountIds = getJiraUsersFromField(
@@ -257,7 +277,15 @@ export async function syncGitHubReviewersToJira({
   }
 }
 
-export async function addGitHubReviewerToJira({ issueKey, githubUsername, eventTime }) {
+export async function addGitHubReviewerToJira({
+  issueKey,
+  githubUsername,
+  owner,
+  repo,
+  pullRequestNumber,
+  installationId,
+  eventTime
+}) {
   const jiraAccountId = findJiraAccountIdForGitHubUsername(githubUsername);
 
   if (!jiraAccountId) {
@@ -271,6 +299,10 @@ export async function addGitHubReviewerToJira({ issueKey, githubUsername, eventT
   await syncGitHubReviewersToJira({
     issueKey,
     githubReviewers: [{ login: githubUsername }],
+    owner,
+    repo,
+    pullRequestNumber,
+    installationId,
     eventTime
   });
 
@@ -281,8 +313,13 @@ function mergeUniqueValues(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
-async function getSubmittedReviewAuthors({ owner, repo, pullRequestNumber }) {
-  const reviews = await getGitHubPullRequestReviews({ owner, repo, pullRequestNumber });
+async function getSubmittedReviewAuthors({ owner, repo, pullRequestNumber, installationId }) {
+  const reviews = await getGitHubPullRequestReviews({
+    owner,
+    repo,
+    pullRequestNumber,
+    installationId
+  });
   const reviewAuthorsByLogin = new Map();
 
   for (const review of reviews || []) {
@@ -300,9 +337,15 @@ export async function announceGitHubPullRequestCommitsToJira({
   issueKey,
   owner,
   repo,
-  pullRequestNumber
+  pullRequestNumber,
+  installationId
 }) {
-  const commits = await getGitHubPullRequestCommits({ owner, repo, pullRequestNumber });
+  const commits = await getGitHubPullRequestCommits({
+    owner,
+    repo,
+    pullRequestNumber,
+    installationId
+  });
   const createdComments = [];
 
   for (const commit of commits || []) {
@@ -515,7 +558,8 @@ export async function mirrorJiraCommentToGitHub({ issueKey, commentId }) {
       owner: link.owner,
       repo: link.repo,
       issueNumber: link.pullRequestNumber,
-      body: bodyMarkdown
+      body: bodyMarkdown,
+      installationId: link.installationId
     });
     const githubSourceId = `${link.owner}/${link.repo}/${createdGitHubComment.id}`;
 

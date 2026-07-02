@@ -36,6 +36,15 @@ export async function findGitHubUsernameForJiraUser(jiraUser) {
     return undefined;
   }
 
+  if (!process.env.GITHUB_TOKEN) {
+    console.info('Skipped Jira user email lookup because personal token fallback is not configured.', {
+      jiraAccountId: jiraUser?.accountId,
+      displayName: jiraUser?.displayName
+    });
+
+    return undefined;
+  }
+
   const searchResult = await githubRequestJson(
     `/search/users?q=${encodeURIComponent(`${emailAddress} in:email`)}&per_page=2`,
     { method: 'GET' }

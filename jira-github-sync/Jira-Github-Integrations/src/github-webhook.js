@@ -40,6 +40,14 @@ export function sanitizeErrorMessage(errorMessage) {
   return errorMessage
     .replace(new RegExp(escapeRegExp(process.env.GITHUB_TOKEN || 'a^'), 'g'), '[redacted-github-token]')
     .replace(
+      new RegExp(escapeRegExp(process.env.GITHUB_APP_PRIVATE_KEY_BASE64 || 'a^'), 'g'),
+      '[redacted-github-app-private-key]'
+    )
+    .replace(
+      new RegExp(escapeRegExp(process.env.GITHUB_APP_PRIVATE_KEY || 'a^'), 'g'),
+      '[redacted-github-app-private-key]'
+    )
+    .replace(
       new RegExp(escapeRegExp(process.env.GITHUB_WEBHOOK_SECRET || 'a^'), 'g'),
       '[redacted-webhook-secret]'
     );

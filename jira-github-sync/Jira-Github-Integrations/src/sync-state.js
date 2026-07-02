@@ -102,11 +102,17 @@ export const syncStateKeys = {
   }
 };
 
-export async function rememberPullRequestLink({ issueKey, owner, repo, pullRequestNumber }) {
+export async function rememberPullRequestLink({
+  issueKey,
+  owner,
+  repo,
+  pullRequestNumber,
+  installationId
+}) {
   const key = syncStateKeys.issueLinks(issueKey);
   const existingLinks = (await kvs.get(key)) || [];
-  const nextLink = { owner, repo, pullRequestNumber };
-  const alreadyStored = existingLinks.some((link) => {
+  const nextLink = removeUndefinedValues({ owner, repo, pullRequestNumber, installationId });
+  const existingLinkIndex = existingLinks.findIndex((link) => {
     return (
       link.owner === owner &&
       link.repo === repo &&
@@ -114,9 +120,15 @@ export async function rememberPullRequestLink({ issueKey, owner, repo, pullReque
     );
   });
 
-  if (alreadyStored) {
+  if (existingLinkIndex >= 0) {
+    const updatedLinks = [...existingLinks];
+    updatedLinks[existingLinkIndex] = {
+      ...updatedLinks[existingLinkIndex],
+      ...nextLink
+    };
+    await kvs.set(key, updatedLinks);
     await kvs.set(syncStateKeys.pullRequestIssueLink(owner, repo, pullRequestNumber), issueKey);
-    return existingLinks;
+    return updatedLinks;
   }
 
   const updatedLinks = [...existingLinks, nextLink];
@@ -369,4 +381,10 @@ function encodeKeyPart(value) {
    * every dynamic segment keeps keys valid without restricting GitHub names.
    */
   return Buffer.from(String(value), 'utf8').toString('base64url');
+}
+
+function removeUndefinedValues(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, nestedValue]) => nestedValue !== undefined)
+  );
 }

@@ -47,8 +47,15 @@ way to skip comments it created itself.
 Set these Forge environment variables before deploying:
 
 ```sh
-forge variables set --encrypt GITHUB_TOKEN <github-token>
+forge variables set GITHUB_APP_ID <github-app-id>
+forge variables set --encrypt GITHUB_APP_PRIVATE_KEY_BASE64 <base64-private-key>
 forge variables set --encrypt GITHUB_WEBHOOK_SECRET <shared-webhook-secret>
+```
+
+Generate the private-key value from the PEM file with:
+
+```sh
+base64 -i <github-app-private-key.pem> | tr -d '\n'
 ```
 
 Optional variables:
@@ -59,9 +66,16 @@ forge variables set JIRA_PROJECT_KEYS ABC,DEF
 forge variables set JIRA_SITE_URL https://your-site.atlassian.net
 ```
 
-- `GITHUB_TOKEN` must be able to read and write issue comments, assign issues,
-  request pull request reviewers, and search GitHub users.
+- If `GITHUB_TOKEN` is configured as a fallback, it must be able to read and
+  write issue comments, assign issues, request pull request reviewers, and
+  search GitHub users.
+- `GITHUB_APP_ID` is the GitHub App ID from the app settings page.
+- `GITHUB_APP_PRIVATE_KEY_BASE64` is the base64-encoded contents of the GitHub
+  App private key PEM file. The PEM file path is not stored in Forge.
 - `GITHUB_WEBHOOK_SECRET` must match the secret configured on the GitHub webhook.
+- `GITHUB_TOKEN` is only a temporary fallback for local transition/testing. The
+  production path uses GitHub App installation tokens, so no personal access
+  token is required once the GitHub App is configured and installed.
 - `GITHUB_ORGANIZATION` restricts accepted webhook traffic to one GitHub
   organization.
 - `JIRA_PROJECT_KEYS` restricts issue-key matches to specific Jira project keys.
@@ -78,9 +92,9 @@ The map is keyed by Jira account ID and stores the matching GitHub username. The
 app derives the reverse GitHub username -> Jira account ID map from the same
 file for GitHub-to-Jira assignee and reviewer sync.
 
-If no local mapping exists, Jira-to-GitHub sync attempts an email search in
-GitHub when Jira exposes the user's email address. GitHub-to-Jira sync requires
-the local mapping.
+GitHub-to-Jira sync requires the local mapping. Jira-to-GitHub sync also uses
+the local mapping first; the old email-search fallback only runs when
+`GITHUB_TOKEN` is still configured.
 
 ## GitHub webhook
 

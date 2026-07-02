@@ -26,7 +26,7 @@ export const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
 ]);
 
 export function getRequiredConfiguration() {
-  return ['GITHUB_TOKEN', 'GITHUB_WEBHOOK_SECRET'];
+  return ['GITHUB_WEBHOOK_SECRET'];
 }
 
 export function normalizeJiraSiteUrl(rawSiteUrl = process.env.JIRA_SITE_URL) {
