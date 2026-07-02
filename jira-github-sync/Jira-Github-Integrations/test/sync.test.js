@@ -14,6 +14,7 @@ import {
 import { adfToMarkdown, markdownToSimpleAdf } from '../src/markdown.js';
 import { stableHash, syncStateKeys } from '../src/sync-state.js';
 import { isHumanGitHubUser } from '../src/github-webhook.js';
+import { isOpenGitHubPullRequest } from '../src/sync-service.js';
 
 test('extracts unique Jira issue keys case-insensitively', () => {
   assert.deepEqual(extractJiraIssueKeys('abc-12 ABC-12 DEF-7'), ['ABC-12', 'DEF-7']);
@@ -41,6 +42,12 @@ test('identifies human GitHub comment authors', () => {
   assert.equal(isHumanGitHubUser({ login: 'coderabbitai[bot]', type: 'Bot' }), false);
   assert.equal(isHumanGitHubUser({ login: 'github-actions[bot]', type: 'Bot' }), false);
   assert.equal(isHumanGitHubUser(undefined), false);
+});
+
+test('identifies active GitHub pull requests', () => {
+  assert.equal(isOpenGitHubPullRequest({ number: 12, state: 'open' }), true);
+  assert.equal(isOpenGitHubPullRequest({ number: 11, state: 'closed' }), false);
+  assert.equal(isOpenGitHubPullRequest(undefined), false);
 });
 
 test('renders a managed Jira description comment', () => {

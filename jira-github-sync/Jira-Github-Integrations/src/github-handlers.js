@@ -118,6 +118,16 @@ async function handlePullRequestEvent(payload) {
     });
   }
 
+  console.info('Processing GitHub pull request event.', {
+    action: payload.action || 'unknown',
+    repositoryOwner,
+    repositoryName,
+    pullRequestNumber,
+    pullRequestState: pullRequest.state || 'unknown',
+    assigneeCount: pullRequest.assignees?.length || 0,
+    requestedReviewerCount: pullRequest.requested_reviewers?.length || 0
+  });
+
   if (!isAllowedGitHubOrganization(repositoryOwner)) {
     return jsonResponse(202, {
       message: `Ignored pull request from GitHub owner ${repositoryOwner}.`

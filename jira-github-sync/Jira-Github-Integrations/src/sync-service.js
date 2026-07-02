@@ -45,16 +45,9 @@ import {
 import { JIRA_REVIEWERS_FIELD_ID } from './config.js';
 
 export async function syncJiraFieldsToKnownPullRequests({ jiraIssue, eventTime }) {
-  const links = await getPullRequestLinks(jiraIssue.key);
+  const activePullRequestLinks = await getOpenPullRequestLinks(jiraIssue.key);
 
-  for (const link of links) {
-    const pullRequest = await getGitHubPullRequest({
-      owner: link.owner,
-      repo: link.repo,
-      pullRequestNumber: link.pullRequestNumber,
-      installationId: link.installationId
-    });
-
+  for (const { link, pullRequest } of activePullRequestLinks) {
     await syncJiraDescriptionToGitHubPullRequest({
       jiraIssue,
       owner: link.owner,
@@ -550,10 +543,10 @@ export async function mirrorJiraCommentToGitHub({ issueKey, commentId }) {
     jiraComment
   });
 
-  const links = await getPullRequestLinks(issueKey);
+  const activePullRequestLinks = await getOpenPullRequestLinks(issueKey);
   const createdComments = [];
 
-  for (const link of links) {
+  for (const { link } of activePullRequestLinks) {
     const createdGitHubComment = await createGitHubIssueComment({
       owner: link.owner,
       repo: link.repo,
@@ -583,6 +576,43 @@ export async function mirrorJiraCommentToGitHub({ issueKey, commentId }) {
   }
 
   return createdComments;
+}
+
+async function getOpenPullRequestLinks(issueKey) {
+  const links = await getPullRequestLinks(issueKey);
+  const activePullRequestLinks = [];
+
+  for (const link of links) {
+    const pullRequest = await getGitHubPullRequest({
+      owner: link.owner,
+      repo: link.repo,
+      pullRequestNumber: link.pullRequestNumber,
+      installationId: link.installationId
+    });
+
+    if (!isOpenGitHubPullRequest(pullRequest)) {
+      console.info('Skipped Jira-to-GitHub sync for a closed pull request.', {
+        issueKey,
+        owner: link.owner,
+        repo: link.repo,
+        pullRequestNumber: link.pullRequestNumber,
+        pullRequestState: pullRequest?.state || 'unknown'
+      });
+      continue;
+    }
+
+    activePullRequestLinks.push({ link, pullRequest });
+  }
+
+  return activePullRequestLinks;
+}
+
+export function isOpenGitHubPullRequest(pullRequest) {
+  /*
+   * A Jira issue can be linked to multiple PRs over time. Closed PRs are history,
+   * so Jira-side changes should only be mirrored to PRs that are still active.
+   */
+  return pullRequest?.state === 'open';
 }
 
 export async function loadAndSyncJiraIssueToKnownPullRequests({ issueKey, eventTime }) {
