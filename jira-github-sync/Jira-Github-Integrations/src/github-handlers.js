@@ -6,6 +6,7 @@ import {
 import {
   isAllowedGitHubOrganization,
   isDebugResponseEnabled,
+  isHumanGitHubUser,
   isValidGitHubSignature,
   sanitizeErrorMessage
 } from './github-webhook.js';
@@ -209,6 +210,12 @@ async function handleIssueCommentEvent(payload) {
   if (!payload.issue?.pull_request) {
     return jsonResponse(202, {
       message: 'Ignored issue comment because it was not on a pull request.'
+    });
+  }
+
+  if (!isHumanGitHubUser(payload.comment?.user)) {
+    return jsonResponse(202, {
+      message: 'Ignored GitHub comment because it was not created by a human user.'
     });
   }
 

@@ -62,6 +62,16 @@ export function isDebugResponseEnabled() {
   return process.env.DEBUG_WEBHOOK_RESPONSES === 'true';
 }
 
+export function isHumanGitHubUser(user) {
+  /*
+   * GitHub identifies normal human accounts as "User". GitHub Apps and
+   * automation accounts such as CodeRabbit, Dependabot, and GitHub Actions are
+   * usually sent as "Bot", so rejecting anything else keeps machine-generated
+   * PR chatter out of Jira.
+   */
+  return user?.type === 'User';
+}
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

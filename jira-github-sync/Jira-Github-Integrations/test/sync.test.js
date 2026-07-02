@@ -13,6 +13,7 @@ import {
 } from '../src/comment-format.js';
 import { adfToMarkdown, markdownToSimpleAdf } from '../src/markdown.js';
 import { stableHash, syncStateKeys } from '../src/sync-state.js';
+import { isHumanGitHubUser } from '../src/github-webhook.js';
 
 test('extracts unique Jira issue keys case-insensitively', () => {
   assert.deepEqual(extractJiraIssueKeys('abc-12 ABC-12 DEF-7'), ['ABC-12', 'DEF-7']);
@@ -33,6 +34,13 @@ test('builds and detects sync markers', () => {
   assert.equal(containsAnySyncMarker('hello'), false);
   assert.equal(containsAnySyncMarker('<!-- jira-github-comment-sync:jira:2 -->'), true);
   assert.equal(containsAnySyncMarker('<!-- jira-github-review-summary-sync:owner/repo:1 -->'), true);
+});
+
+test('identifies human GitHub comment authors', () => {
+  assert.equal(isHumanGitHubUser({ login: 'b9-mourud', type: 'User' }), true);
+  assert.equal(isHumanGitHubUser({ login: 'coderabbitai[bot]', type: 'Bot' }), false);
+  assert.equal(isHumanGitHubUser({ login: 'github-actions[bot]', type: 'Bot' }), false);
+  assert.equal(isHumanGitHubUser(undefined), false);
 });
 
 test('renders a managed Jira description comment', () => {
