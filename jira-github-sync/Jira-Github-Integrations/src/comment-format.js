@@ -4,6 +4,7 @@ import {
   MAX_GITHUB_COMMENT_BODY_LENGTH,
   MIRRORED_COMMENT_MARKER_PREFIX,
   PR_DESCRIPTION_MARKER_PREFIX,
+  PR_LIFECYCLE_MARKER_PREFIX,
   REVIEW_COMMENT_MARKER_PREFIX,
   REVIEW_MARKER_PREFIX,
   REVIEW_SUMMARY_MARKER_PREFIX,
@@ -80,17 +81,68 @@ export function buildPullRequestDescriptionMarker({ owner, repo, pullRequestNumb
   return `${PR_DESCRIPTION_MARKER_PREFIX}${owner}/${repo}:${pullRequestNumber} -->`;
 }
 
+export function buildPullRequestLifecycleMarker({ owner, repo, pullRequestNumber, lifecycleAction }) {
+  return `${PR_LIFECYCLE_MARKER_PREFIX}${owner}/${repo}:${pullRequestNumber}:${lifecycleAction} -->`;
+}
+
+export function buildPullRequestLifecycleComment({
+  pullRequest,
+  owner,
+  repo,
+  pullRequestNumber,
+  lifecycleAction,
+  actor
+}) {
+  const marker = buildPullRequestLifecycleMarker({
+    owner,
+    repo,
+    pullRequestNumber,
+    lifecycleAction
+  });
+  const title = pullRequest.title || 'Untitled pull request';
+  const author = pullRequest.user?.login || 'unknown GitHub user';
+  const originalUrl = pullRequest.html_url || `https://github.com/${owner}/${repo}/pull/${pullRequestNumber}`;
+  const actionLabel = getPullRequestLifecycleActionLabel(lifecycleAction);
+  const actorLine = lifecycleAction === 'opened'
+    ? `Author: @${author}`
+    : `Actor: @${actor || author}`;
+
+  return [
+    `GitHub pull request ${actionLabel}: ${title}`,
+    '',
+    `Repository: ${owner}/${repo}`,
+    `Pull request: #${pullRequestNumber}`,
+    actorLine,
+    `Original: ${originalUrl}`,
+    '',
+    marker
+  ].join('\n');
+}
+
 export function containsAnySyncMarker(body) {
   return (
     Boolean(body?.includes(DESCRIPTION_MARKER_PREFIX)) ||
     Boolean(body?.includes(MIRRORED_COMMENT_MARKER_PREFIX)) ||
     Boolean(body?.includes(PR_DESCRIPTION_MARKER_PREFIX)) ||
+    Boolean(body?.includes(PR_LIFECYCLE_MARKER_PREFIX)) ||
     Boolean(body?.includes(COMMIT_MARKER_PREFIX)) ||
     Boolean(body?.includes(REVIEW_MARKER_PREFIX)) ||
     Boolean(body?.includes(REVIEW_COMMENT_MARKER_PREFIX)) ||
     Boolean(body?.includes(REVIEW_SUMMARY_MARKER_PREFIX)) ||
     Boolean(body?.includes(REVIEW_THREAD_RESOLVED_MARKER_PREFIX))
   );
+}
+
+function getPullRequestLifecycleActionLabel(lifecycleAction) {
+  if (lifecycleAction === 'merged') {
+    return 'merged';
+  }
+
+  if (lifecycleAction === 'closed') {
+    return 'closed without merge';
+  }
+
+  return 'created';
 }
 
 function buildIssueHeading(issueKey, summary = 'Untitled Jira issue') {

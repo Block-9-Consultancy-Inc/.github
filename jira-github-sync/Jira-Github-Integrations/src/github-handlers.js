@@ -17,6 +17,7 @@ import { getIssueKeyForPullRequest, rememberPullRequestLink } from './sync-state
 import {
   addGitHubReviewerToJira,
   announceGitHubPullRequestCommitsToJira,
+  announceGitHubPullRequestLifecycleToJira,
   announceGitHubPushCommitsToJira,
   announceGitHubPullRequestReviewCommentToJira,
   announceGitHubPullRequestReviewThreadResolvedToJira,
@@ -270,6 +271,26 @@ async function handlePullRequestEvent(payload) {
     });
   }
 
+  const lifecycleAction = getPullRequestLifecycleAction(payload);
+
+  if (lifecycleAction) {
+    await announceGitHubPullRequestLifecycleToJira({
+      issueKey: jiraIssueKey,
+      pullRequest,
+      owner: repositoryOwner,
+      repo: repositoryName,
+      pullRequestNumber,
+      lifecycleAction,
+      actor: pullRequest.merged_by?.login || payload.sender?.login
+    });
+  }
+
+  if (payload.action === 'closed') {
+    return jsonResponse(200, {
+      message: `Processed GitHub PR #${pullRequestNumber} ${lifecycleAction} for Jira issue ${jiraIssueKey}.`
+    });
+  }
+
   await syncJiraDescriptionToGitHubPullRequest({
     jiraIssue,
     owner: repositoryOwner,
@@ -337,6 +358,22 @@ function shouldMirrorPullRequestDescription(action) {
     action === 'edited' ||
     action === 'reopened' ||
     action === 'ready_for_review';
+}
+
+function getPullRequestLifecycleAction(payload) {
+  if (payload.action === 'opened') {
+    return 'opened';
+  }
+
+  if (payload.action === 'closed' && payload.pull_request?.merged) {
+    return 'merged';
+  }
+
+  if (payload.action === 'closed') {
+    return 'closed';
+  }
+
+  return undefined;
 }
 
 async function handleIssueCommentEvent(payload) {
