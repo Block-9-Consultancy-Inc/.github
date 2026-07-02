@@ -20,6 +20,7 @@ import {
   announceGitHubPullRequestReviewCommentToJira,
   announceGitHubPullRequestReviewThreadResolvedToJira,
   announceGitHubPullRequestReviewToJira,
+  mirrorGitHubPullRequestDescriptionToJira,
   mirrorGitHubCommentToJira,
   syncGitHubAssigneesToJira,
   syncGitHubReviewersToJira,
@@ -166,6 +167,16 @@ async function handlePullRequestEvent(payload) {
     installationId
   });
 
+  if (shouldMirrorPullRequestDescription(payload.action)) {
+    await mirrorGitHubPullRequestDescriptionToJira({
+      issueKey: jiraIssueKey,
+      pullRequest,
+      owner: repositoryOwner,
+      repo: repositoryName,
+      pullRequestNumber
+    });
+  }
+
   if (payload.action === 'opened' || payload.action === 'synchronize') {
     await announceGitHubPullRequestCommitsToJira({
       issueKey: jiraIssueKey,
@@ -208,6 +219,13 @@ async function handlePullRequestEvent(payload) {
   return jsonResponse(200, {
     message: `Processed GitHub PR #${pullRequestNumber} for Jira issue ${jiraIssueKey}.`
   });
+}
+
+function shouldMirrorPullRequestDescription(action) {
+  return action === 'opened' ||
+    action === 'edited' ||
+    action === 'reopened' ||
+    action === 'ready_for_review';
 }
 
 async function handleIssueCommentEvent(payload) {

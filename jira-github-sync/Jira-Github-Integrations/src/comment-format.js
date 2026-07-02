@@ -3,6 +3,7 @@ import {
   COMMIT_MARKER_PREFIX,
   MAX_GITHUB_COMMENT_BODY_LENGTH,
   MIRRORED_COMMENT_MARKER_PREFIX,
+  PR_DESCRIPTION_MARKER_PREFIX,
   REVIEW_COMMENT_MARKER_PREFIX,
   REVIEW_MARKER_PREFIX,
   REVIEW_SUMMARY_MARKER_PREFIX,
@@ -53,14 +54,37 @@ export function buildMirroredJiraCommentFromGitHub({ githubComment, owner, repo,
   return [marker, githubComment.body || '', footer].join('\n\n');
 }
 
+export function buildMirroredJiraCommentFromGitHubPullRequestDescription({
+  pullRequest,
+  owner,
+  repo,
+  pullRequestNumber
+}) {
+  const marker = buildPullRequestDescriptionMarker({ owner, repo, pullRequestNumber });
+  const authorName = pullRequest.user?.login || 'unknown-github-user';
+  const originalUrl = pullRequest.html_url || `https://github.com/${owner}/${repo}/pull/${pullRequestNumber}`;
+  const footer = buildVisibleFooter({
+    source: 'GitHub PR description',
+    author: `@${authorName}`,
+    originalUrl
+  });
+
+  return [marker, pullRequest.body || '', footer].join('\n\n');
+}
+
 export function buildMirroredCommentMarker(sourceSystem, sourceId) {
   return `${MIRRORED_COMMENT_MARKER_PREFIX}${sourceSystem}:${sourceId} -->`;
+}
+
+export function buildPullRequestDescriptionMarker({ owner, repo, pullRequestNumber }) {
+  return `${PR_DESCRIPTION_MARKER_PREFIX}${owner}/${repo}:${pullRequestNumber} -->`;
 }
 
 export function containsAnySyncMarker(body) {
   return (
     Boolean(body?.includes(DESCRIPTION_MARKER_PREFIX)) ||
     Boolean(body?.includes(MIRRORED_COMMENT_MARKER_PREFIX)) ||
+    Boolean(body?.includes(PR_DESCRIPTION_MARKER_PREFIX)) ||
     Boolean(body?.includes(COMMIT_MARKER_PREFIX)) ||
     Boolean(body?.includes(REVIEW_MARKER_PREFIX)) ||
     Boolean(body?.includes(REVIEW_COMMENT_MARKER_PREFIX)) ||

@@ -7,6 +7,7 @@ export const MAX_GITHUB_COMMENT_PAGES_TO_SCAN = 10;
 
 export const DESCRIPTION_MARKER_PREFIX = '<!-- jira-description-sync:';
 export const MIRRORED_COMMENT_MARKER_PREFIX = '<!-- jira-github-comment-sync:';
+export const PR_DESCRIPTION_MARKER_PREFIX = '<!-- jira-github-pr-description-sync:';
 export const COMMIT_MARKER_PREFIX = '<!-- jira-github-commit-sync:';
 export const REVIEW_MARKER_PREFIX = '<!-- jira-github-review-sync:';
 export const REVIEW_COMMENT_MARKER_PREFIX = '<!-- jira-github-review-comment-sync:';

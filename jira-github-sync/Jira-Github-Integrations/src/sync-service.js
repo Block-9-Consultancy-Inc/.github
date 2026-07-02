@@ -10,8 +10,10 @@ import {
 } from './github-client.js';
 import {
   addJiraComment,
+  findJiraCommentContaining,
   getJiraComment,
   getJiraIssue,
+  updateJiraComment,
   updateJiraAssignee,
   updateJiraReviewers
 } from './jira-client.js';
@@ -25,12 +27,15 @@ import {
   buildGitHubDescriptionComment,
   buildMirroredGitHubCommentFromJira,
   buildMirroredJiraCommentFromGitHub,
+  buildMirroredJiraCommentFromGitHubPullRequestDescription,
+  buildPullRequestDescriptionMarker,
   containsAnySyncMarker
 } from './comment-format.js';
 import { adfToMarkdown } from './markdown.js';
 import {
   getDescriptionCommentId,
   getPullRequestLinks,
+  getPullRequestDescriptionCommentId,
   getReviewCommentsForReview,
   hasCommitAnnouncement,
   hasCommentMapping,
@@ -38,6 +43,7 @@ import {
   rememberCommitAnnouncement,
   rememberCommentMapping,
   rememberDescriptionCommentId,
+  rememberPullRequestDescriptionCommentId,
   rememberReviewComment,
   rememberReviewNotification,
   shouldAcceptFieldChange
@@ -130,6 +136,71 @@ export async function syncJiraDescriptionToGitHubPullRequest({
   });
 
   return createdComment.id;
+}
+
+export async function mirrorGitHubPullRequestDescriptionToJira({
+  issueKey,
+  pullRequest,
+  owner,
+  repo,
+  pullRequestNumber
+}) {
+  if (!pullRequest.body?.trim()) {
+    console.info('Skipped GitHub PR description sync because the PR body is empty.', {
+      issueKey,
+      owner,
+      repo,
+      pullRequestNumber
+    });
+    return undefined;
+  }
+
+  const body = buildMirroredJiraCommentFromGitHubPullRequestDescription({
+    pullRequest,
+    owner,
+    repo,
+    pullRequestNumber
+  });
+  const storedCommentId = await getPullRequestDescriptionCommentId({
+    issueKey,
+    owner,
+    repo,
+    pullRequestNumber
+  });
+
+  if (storedCommentId) {
+    const existingComment = await getJiraComment({ issueKey, commentId: storedCommentId });
+
+    if (existingComment) {
+      return updateJiraComment({ issueKey, commentId: storedCommentId, body });
+    }
+  }
+
+  const marker = buildPullRequestDescriptionMarker({ owner, repo, pullRequestNumber });
+  const fallbackComment = await findJiraCommentContaining({ issueKey, marker });
+
+  if (fallbackComment?.id) {
+    const updatedComment = await updateJiraComment({ issueKey, commentId: fallbackComment.id, body });
+    await rememberPullRequestDescriptionCommentId({
+      issueKey,
+      owner,
+      repo,
+      pullRequestNumber,
+      commentId: fallbackComment.id
+    });
+    return updatedComment;
+  }
+
+  const createdComment = await addJiraComment({ issueKey, body });
+  await rememberPullRequestDescriptionCommentId({
+    issueKey,
+    owner,
+    repo,
+    pullRequestNumber,
+    commentId: createdComment.id
+  });
+
+  return createdComment;
 }
 
 export async function syncJiraPeopleToGitHubPullRequest({

@@ -25,6 +25,16 @@ export const syncStateKeys = {
     ].join(':');
   },
 
+  pullRequestDescriptionComment(issueKey, owner, repo, pullRequestNumber) {
+    return [
+      'pull-request-description-comment',
+      encodeKeyPart(issueKey),
+      encodeKeyPart(owner),
+      encodeKeyPart(repo),
+      encodeKeyPart(pullRequestNumber)
+    ].join(':');
+  },
+
   commentMap(sourceSystem, sourceId) {
     return `comment-map:${encodeKeyPart(sourceSystem)}:${encodeKeyPart(sourceId)}`;
   },
@@ -157,6 +167,28 @@ export async function rememberDescriptionCommentId({
   commentId
 }) {
   await kvs.set(syncStateKeys.descriptionComment(issueKey, owner, repo, pullRequestNumber), commentId);
+}
+
+export async function getPullRequestDescriptionCommentId({
+  issueKey,
+  owner,
+  repo,
+  pullRequestNumber
+}) {
+  return kvs.get(syncStateKeys.pullRequestDescriptionComment(issueKey, owner, repo, pullRequestNumber));
+}
+
+export async function rememberPullRequestDescriptionCommentId({
+  issueKey,
+  owner,
+  repo,
+  pullRequestNumber,
+  commentId
+}) {
+  await kvs.set(
+    syncStateKeys.pullRequestDescriptionComment(issueKey, owner, repo, pullRequestNumber),
+    commentId
+  );
 }
 
 export async function hasCommentMapping(sourceSystem, sourceId) {

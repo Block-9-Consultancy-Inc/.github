@@ -9,6 +9,8 @@ import {
   buildDescriptionMarker,
   buildGitHubDescriptionComment,
   buildMirroredCommentMarker,
+  buildMirroredJiraCommentFromGitHubPullRequestDescription,
+  buildPullRequestDescriptionMarker,
   containsAnySyncMarker
 } from '../src/comment-format.js';
 import { adfToMarkdown, markdownToSimpleAdf } from '../src/markdown.js';
@@ -32,8 +34,13 @@ test('finds Jira key from allowed projects only', () => {
 test('builds and detects sync markers', () => {
   assert.equal(buildDescriptionMarker('ABC-12'), '<!-- jira-description-sync:ABC-12 -->');
   assert.equal(buildMirroredCommentMarker('github', '1'), '<!-- jira-github-comment-sync:github:1 -->');
+  assert.equal(
+    buildPullRequestDescriptionMarker({ owner: 'owner', repo: 'repo', pullRequestNumber: 5 }),
+    '<!-- jira-github-pr-description-sync:owner/repo:5 -->'
+  );
   assert.equal(containsAnySyncMarker('hello'), false);
   assert.equal(containsAnySyncMarker('<!-- jira-github-comment-sync:jira:2 -->'), true);
+  assert.equal(containsAnySyncMarker('<!-- jira-github-pr-description-sync:owner/repo:1 -->'), true);
   assert.equal(containsAnySyncMarker('<!-- jira-github-review-summary-sync:owner/repo:1 -->'), true);
 });
 
@@ -73,6 +80,24 @@ test('renders a managed Jira description comment', () => {
   assert.match(body, /jira-description-sync:ABC-12/);
   assert.match(body, /Mirror this/);
   assert.match(body, /managed comment/);
+});
+
+test('renders a mirrored GitHub PR description Jira comment', () => {
+  const body = buildMirroredJiraCommentFromGitHubPullRequestDescription({
+    pullRequest: {
+      body: 'This PR changes sync behavior.',
+      html_url: 'https://github.com/owner/repo/pull/5',
+      user: { login: 'b9-mourud' }
+    },
+    owner: 'owner',
+    repo: 'repo',
+    pullRequestNumber: 5
+  });
+
+  assert.match(body, /jira-github-pr-description-sync:owner\/repo:5/);
+  assert.match(body, /This PR changes sync behavior\./);
+  assert.match(body, /GitHub PR description/);
+  assert.match(body, /https:\/\/github.com\/owner\/repo\/pull\/5/);
 });
 
 test('converts basic ADF to Markdown', () => {
@@ -124,6 +149,10 @@ test('uses stable KVS keys and stable hashes', () => {
   assert.equal(
     syncStateKeys.descriptionComment('ABC-12', 'owner', 'repo', 5),
     'description-comment:QUJDLTEy:b3duZXI:cmVwbw:NQ'
+  );
+  assert.equal(
+    syncStateKeys.pullRequestDescriptionComment('ABC-12', 'owner', 'repo', 5),
+    'pull-request-description-comment:QUJDLTEy:b3duZXI:cmVwbw:NQ'
   );
   assert.equal(
     syncStateKeys.commentMap('github', 'owner/repo/123'),
