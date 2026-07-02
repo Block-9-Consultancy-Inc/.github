@@ -388,11 +388,7 @@ function getGitHubAppPrivateKey() {
       return normalizePemPrivateKey(rawBase64Value);
     }
 
-    return normalizePemPrivateKey(
-      Buffer
-        .from(rawBase64Value, 'base64')
-        .toString('utf8')
-    );
+    return decodeBase64PemPrivateKey(rawBase64Value) || normalizePemPrivateKey(rawBase64Value);
   }
 
   const rawPemValue = normalizeEnvironmentSecret(process.env.GITHUB_APP_PRIVATE_KEY);
@@ -401,9 +397,15 @@ function getGitHubAppPrivateKey() {
     /*
      * Base64 is the recommended Forge variable format because multiline PEM
      * values are awkward to set in a shell. This fallback keeps local tunnels
-     * and manually-entered variables working if the raw PEM is provided.
+     * and manually-entered variables working if the raw PEM is provided. It
+     * also accepts a base64 value here because it is easy to paste the encoded
+     * key into the raw-key variable while setting Forge variables by hand.
      */
-    return normalizePemPrivateKey(rawPemValue);
+    if (looksLikePemPrivateKey(rawPemValue)) {
+      return normalizePemPrivateKey(rawPemValue);
+    }
+
+    return decodeBase64PemPrivateKey(rawPemValue) || normalizePemPrivateKey(rawPemValue);
   }
 
   return undefined;
@@ -421,6 +423,22 @@ function normalizePemPrivateKey(value) {
   return value.replace(/\\n/g, '\n').trim();
 }
 
+function decodeBase64PemPrivateKey(value) {
+  /*
+   * Forge variable values should be only the base64 text. During manual setup,
+   * it is easy to paste the terminal prompt suffix as a trailing "$"; removing
+   * only a trailing "$" keeps the recovery narrow and predictable.
+   */
+  const base64Candidate = value.replace(/\s/g, '').replace(/\$+$/g, '');
+  const decodedValue = Buffer.from(base64Candidate, 'base64').toString('utf8');
+
+  if (!looksLikePemPrivateKey(decodedValue)) {
+    return undefined;
+  }
+
+  return normalizePemPrivateKey(decodedValue);
+}
+
 function looksLikePemPrivateKey(value) {
   return value.includes('-----BEGIN') && value.includes('PRIVATE KEY-----');
 }
@@ -430,12 +448,11 @@ function describeConfiguredPrivateKeyShape(privateKeyPem) {
     return 'No private key value was found';
   }
 
-  const firstLine = privateKeyPem.split('\n')[0] || '';
   const hasPemHeader = looksLikePemPrivateKey(privateKeyPem);
 
   return [
-    `Detected first line: ${firstLine || '[empty]'}`,
     `PEM header present: ${hasPemHeader}`,
+    `single-line value: ${!privateKeyPem.includes('\n')}`,
     `length: ${privateKeyPem.length}`
   ].join('; ');
 }
