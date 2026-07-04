@@ -58,6 +58,16 @@ export const syncStateKeys = {
     ].join(':');
   },
 
+  pullRequestLifecycleNotification(owner, repo, pullRequestNumber, lifecycleAction) {
+    return [
+      'pull-request-lifecycle-notification',
+      encodeKeyPart(owner),
+      encodeKeyPart(repo),
+      encodeKeyPart(pullRequestNumber),
+      encodeKeyPart(lifecycleAction)
+    ].join(':');
+  },
+
   reviewComment(owner, repo, reviewId, reviewCommentId) {
     return [
       'review-comment',
@@ -247,6 +257,37 @@ export async function rememberReviewNotification({
     issueKey,
     notifiedAt: new Date().toISOString()
   });
+}
+
+export async function hasPullRequestLifecycleNotification({
+  owner,
+  repo,
+  pullRequestNumber,
+  lifecycleAction
+}) {
+  return Boolean(await kvs.get(
+    syncStateKeys.pullRequestLifecycleNotification(owner, repo, pullRequestNumber, lifecycleAction)
+  ));
+}
+
+export async function rememberPullRequestLifecycleNotification({
+  owner,
+  repo,
+  pullRequestNumber,
+  lifecycleAction,
+  issueKey
+}) {
+  await kvs.set(
+    syncStateKeys.pullRequestLifecycleNotification(owner, repo, pullRequestNumber, lifecycleAction),
+    {
+      owner,
+      repo,
+      pullRequestNumber,
+      lifecycleAction,
+      issueKey,
+      notifiedAt: new Date().toISOString()
+    }
+  );
 }
 
 export async function rememberReviewComment({ owner, repo, reviewId, reviewComment }) {

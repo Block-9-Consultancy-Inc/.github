@@ -28,6 +28,7 @@ import {
   buildMirroredGitHubCommentFromJira,
   buildMirroredJiraCommentFromGitHub,
   buildMirroredJiraCommentFromGitHubPullRequestDescription,
+  buildPullRequestLifecycleComment,
   buildPullRequestDescriptionMarker,
   containsAnySyncMarker
 } from './comment-format.js';
@@ -37,12 +38,14 @@ import {
   getPullRequestLinks,
   getPullRequestDescriptionCommentId,
   getReviewCommentsForReview,
+  hasPullRequestLifecycleNotification,
   hasCommitAnnouncement,
   hasCommentMapping,
   hasReviewNotification,
   rememberCommitAnnouncement,
   rememberCommentMapping,
   rememberDescriptionCommentId,
+  rememberPullRequestLifecycleNotification,
   rememberPullRequestDescriptionCommentId,
   rememberReviewComment,
   rememberReviewNotification,
@@ -434,6 +437,52 @@ export async function announceGitHubPullRequestCommitsToJira({
   }
 
   return createdComments;
+}
+
+export async function announceGitHubPullRequestLifecycleToJira({
+  issueKey,
+  pullRequest,
+  owner,
+  repo,
+  pullRequestNumber,
+  lifecycleAction,
+  actor
+}) {
+  /*
+   * GitHub retries webhook deliveries when the app is slow or unavailable. This
+   * KVS marker keeps lifecycle comments from piling up when the same opened,
+   * closed, or merged delivery is received more than once.
+   */
+  if (await hasPullRequestLifecycleNotification({
+    owner,
+    repo,
+    pullRequestNumber,
+    lifecycleAction
+  })) {
+    return undefined;
+  }
+
+  const createdComment = await addJiraComment({
+    issueKey,
+    body: buildPullRequestLifecycleComment({
+      pullRequest,
+      owner,
+      repo,
+      pullRequestNumber,
+      lifecycleAction,
+      actor
+    })
+  });
+
+  await rememberPullRequestLifecycleNotification({
+    owner,
+    repo,
+    pullRequestNumber,
+    lifecycleAction,
+    issueKey
+  });
+
+  return createdComment;
 }
 
 export async function announceGitHubPushCommitsToJira({

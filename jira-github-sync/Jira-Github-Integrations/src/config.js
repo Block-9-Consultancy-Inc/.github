@@ -13,9 +13,11 @@ export const REVIEW_MARKER_PREFIX = '<!-- jira-github-review-sync:';
 export const REVIEW_COMMENT_MARKER_PREFIX = '<!-- jira-github-review-comment-sync:';
 export const REVIEW_SUMMARY_MARKER_PREFIX = '<!-- jira-github-review-summary-sync:';
 export const REVIEW_THREAD_RESOLVED_MARKER_PREFIX = '<!-- jira-github-review-thread-resolved-sync:';
+export const PR_LIFECYCLE_MARKER_PREFIX = '<!-- jira-github-pr-lifecycle-sync:';
 
 export const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
   'opened',
+  'closed',
   'reopened',
   'edited',
   'synchronize',

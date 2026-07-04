@@ -11,6 +11,8 @@ import {
   buildGitHubDescriptionComment,
   buildMirroredCommentMarker,
   buildMirroredJiraCommentFromGitHubPullRequestDescription,
+  buildPullRequestLifecycleComment,
+  buildPullRequestLifecycleMarker,
   buildPullRequestDescriptionMarker,
   containsAnySyncMarker
 } from '../src/comment-format.js';
@@ -68,9 +70,19 @@ test('builds and detects sync markers', () => {
     buildPullRequestDescriptionMarker({ owner: 'owner', repo: 'repo', pullRequestNumber: 5 }),
     '<!-- jira-github-pr-description-sync:owner/repo:5 -->'
   );
+  assert.equal(
+    buildPullRequestLifecycleMarker({
+      owner: 'owner',
+      repo: 'repo',
+      pullRequestNumber: 5,
+      lifecycleAction: 'merged'
+    }),
+    '<!-- jira-github-pr-lifecycle-sync:owner/repo:5:merged -->'
+  );
   assert.equal(containsAnySyncMarker('hello'), false);
   assert.equal(containsAnySyncMarker('<!-- jira-github-comment-sync:jira:2 -->'), true);
   assert.equal(containsAnySyncMarker('<!-- jira-github-pr-description-sync:owner/repo:1 -->'), true);
+  assert.equal(containsAnySyncMarker('<!-- jira-github-pr-lifecycle-sync:owner/repo:1:closed -->'), true);
   assert.equal(containsAnySyncMarker('<!-- jira-github-review-summary-sync:owner/repo:1 -->'), true);
 });
 
@@ -128,6 +140,26 @@ test('renders a mirrored GitHub PR description Jira comment', () => {
   assert.match(body, /This PR changes sync behavior\./);
   assert.match(body, /GitHub PR description/);
   assert.match(body, /https:\/\/github.com\/owner\/repo\/pull\/5/);
+});
+
+test('renders GitHub PR lifecycle Jira comments', () => {
+  const body = buildPullRequestLifecycleComment({
+    pullRequest: {
+      title: 'ABC-12 Add lifecycle comments',
+      html_url: 'https://github.com/owner/repo/pull/5',
+      user: { login: 'b9-mourud' }
+    },
+    owner: 'owner',
+    repo: 'repo',
+    pullRequestNumber: 5,
+    lifecycleAction: 'merged',
+    actor: 'reviewer'
+  });
+
+  assert.match(body, /GitHub pull request merged: ABC-12 Add lifecycle comments/);
+  assert.match(body, /Repository: owner\/repo/);
+  assert.match(body, /Actor: @reviewer/);
+  assert.match(body, /jira-github-pr-lifecycle-sync:owner\/repo:5:merged/);
 });
 
 test('converts basic ADF to Markdown', () => {
@@ -195,6 +227,10 @@ test('uses stable KVS keys and stable hashes', () => {
   assert.equal(
     syncStateKeys.reviewNotification('owner', 'repo', 'review-comment', '99'),
     'review-notification:b3duZXI:cmVwbw:cmV2aWV3LWNvbW1lbnQ:OTk'
+  );
+  assert.equal(
+    syncStateKeys.pullRequestLifecycleNotification('owner', 'repo', 5, 'merged'),
+    'pull-request-lifecycle-notification:b3duZXI:cmVwbw:NQ:bWVyZ2Vk'
   );
   assert.equal(
     syncStateKeys.reviewSummaryComment('ABC-12', 'owner', 'repo', 5),
