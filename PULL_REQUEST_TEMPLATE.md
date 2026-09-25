@@ -1,4 +1,4 @@
-Ticket: [B9-XXXX](https://recycloroboprojectmanagement.atlassian.net/browse/B9-XXXX)
+Ticket: [B9-XXXX](https://pulse.block9.ca/ptb/browse/B9-XXXX)
 
 ---
 
